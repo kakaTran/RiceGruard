@@ -1,44 +1,34 @@
 "use server"
 
-import OpenAI from "openai"
-
-// Initialize the OpenAI client
-const openai = new OpenAI({
-  apiKey: process.env.NEXT_PUBLIC_OPENAI_API_KEY,
-})
-
 export async function generateExplanation(diseaseName: string): Promise<string> {
-  try {
-    // For healthy leaves, return a simple message
-    // if (diseaseName === "healthy") {
-    //   return "The leaf appears to be healthy with no signs of disease or pest damage. Continue with regular care and monitoring."
-    // }
+  // This is a placeholder function that would typically call an API or database
+  // to get detailed information about the disease
 
-    // For "No specific disease areas detected"
-    if (diseaseName === "no detection") {
-      return "No specific disease patterns were detected in this image. This could mean the image doesn't contain recognizable disease patterns, the disease is at an early stage, or the image quality is affecting analysis. Consider consulting with a plant pathologist for proper diagnosis."
-    }
+  const diseaseInfo: Record<string, string> = {
+    healthy:
+      "This rice leaf appears healthy with no visible signs of disease. Healthy rice leaves typically have a uniform green color without spots, lesions, or discoloration.",
 
-    const response = await openai.chat.completions.create({
-      model: "gpt-4o",
-      messages: [
-        {
-          role: "system",
-          content:
-            "You are a plant pathology expert specializing in citrus diseases. Provide concise, informative explanations about lemon diseases in 2-3 sentences. Include basic information about the disease and general treatment recommendations.",
-        },
-        {
-          role: "user",
-          content: `Explain the lemon disease "${diseaseName}" in 2-3 sentences, including what it is and basic treatment recommendations.`,
-        },
-      ],
-      max_tokens: 150,
-      temperature: 0.7,
-    })
+    "Brown Spot":
+      "Brown Spot (Cochliobolus miyabeanus) is characterized by brown, oval-shaped lesions with gray centers. It typically affects older leaves and can reduce grain quality and yield. The disease is favored by warm temperatures and high humidity.",
 
-    return response.choices[0].message.content || "No explanation available."
-  } catch (error) {
-    console.error("Error generating explanation:", error)
-    return `${diseaseName}: A disease affecting lemon plants. Please consult with a plant pathologist for proper diagnosis and treatment.`
+    "Bacterial Leaf Blight":
+      "Bacterial Leaf Blight (Xanthomonas oryzae) causes water-soaked lesions that turn yellow-orange and eventually gray-white. It spreads rapidly in warm, humid conditions and can cause significant yield losses if infection occurs during the early growth stages.",
+
+    "Rice Blast":
+      "Rice Blast (Magnaporthe oryzae) is one of the most destructive rice diseases worldwide. It produces diamond-shaped lesions with gray centers and dark borders. The disease can affect all above-ground parts of the plant and is favored by cool temperatures and high humidity.",
+
+    "Sheath Blight":
+      "Sheath Blight (Rhizoctonia solani) initially appears as water-soaked, greenish-gray lesions on the leaf sheaths near the water line. These lesions enlarge and become oval with gray centers and brown borders. The disease can spread upward to the leaves and panicles.",
+
+    Tungro:
+      "Rice Tungro disease is caused by a virus complex transmitted by leafhoppers. Infected plants show yellow to orange discoloration, stunted growth, and reduced tillering. It can cause severe yield losses in susceptible varieties.",
+
+    "no detection":
+      "No specific disease patterns were detected in this image. This could mean the leaf is healthy, the disease is at an early stage, or the image quality is affecting analysis. Consider taking another photo with better lighting and focus, or consult with a plant pathologist for a more accurate diagnosis.",
   }
+
+  return (
+    diseaseInfo[diseaseName] ||
+    "Information about this specific disease is not available. Please consult with a plant pathologist for accurate diagnosis and treatment recommendations."
+  )
 }

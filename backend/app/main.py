@@ -56,19 +56,19 @@ IMG_SIZE = 224
 
 # Class indices
 class_names = {
-    0: 'Brown Spot',
-    1: 'Bacterial Leaf Blight',
-    2: 'Rice Blast',
-    3: 'Sheath Blight',
+    0: 'Brown_Spot',
+    1: 'Bacterial_Blight',
+    2: 'Leaf_Blight',
+    3: 'Sheath_Blight',
     4: 'Tungro'
 }
 
 # Colors for different classes
 COLORS = {
-    'Brown Spot': (255, 0, 0),        # Red
-    'Bacterial Leaf Blight': (0, 255, 0),  # Green
-    'Rice Blast': (0, 0, 255),        # Blue
-    'Sheath Blight': (255, 255, 0),   # Yellow
+    'Brown_Spot': (255, 0, 0),        # Red
+    'Bacterial_Blight': (0, 255, 0),  # Green
+    'Leaf_Blight': (0, 0, 255),        # Blue
+    'Sheath_Blight': (255, 255, 0),   # Yellow
     'Tungro': (255, 0, 255)           # Magenta
 }
 
