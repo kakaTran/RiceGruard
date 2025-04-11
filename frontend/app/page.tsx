@@ -31,6 +31,7 @@ export default function Home() {
   const [loadingDetection, setLoadingDetection] = useState(false)
   const [combinedHeatmap, setCombinedHeatmap] = useState<string | null>(null)
   const [loadingCombined, setLoadingCombined] = useState(false)
+  const [isChatOpen, setIsChatOpen] = useState(false)
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0]
@@ -468,8 +469,18 @@ export default function Home() {
                   <TabsContent value="detection">
                     <div className="space-y-4">
                       <div className="relative border rounded-lg overflow-hidden">
-                        {preview && results?.yolo_detections ? (
-                          <DetectionBoxes detections={results.yolo_detections} imageUrl={preview} />
+                        {loadingDetection ? (
+                          <div className="flex flex-col items-center justify-center py-8">
+                            <div className="h-4 w-4 border-2 border-green-600 border-t-transparent rounded-full animate-spin mb-4"></div>
+                            <Skeleton className="h-64 w-full rounded-lg" />
+                            <p className="mt-4 text-sm text-gray-500">Loading detection visualization...</p>
+                          </div>
+                        ) : detectionImage ? (
+                          <img
+                            src={detectionImage || "/placeholder.svg"}
+                            alt="YOLO Detection"
+                            className="w-full h-auto rounded-lg object-contain max-h-[400px]"
+                          />
                         ) : (
                           <div className="flex flex-col items-center justify-center py-12 text-center">
                             <div className="bg-gray-50 p-6 rounded-full mb-4">
@@ -514,34 +525,34 @@ export default function Home() {
                   <TabsContent value="heatmap">
                     <div className="space-y-4">
                       <div className="text-center p-4 border rounded-lg">
-                        <h3 className="font-medium mb-2">Grad-CAM Heatmap Visualization</h3>
+                        <h3 className="font-medium mb-2">Combined Detection & Heatmap</h3>
                         <p className="text-sm text-gray-600 mb-4">
-                          This visualization highlights the regions that influenced the model's decision
+                          This visualization shows both YOLO detections and heatmap analysis
                         </p>
 
-                        {loadingHeatmap ? (
+                        {loadingCombined ? (
                           <div className="flex flex-col items-center justify-center py-8">
                             <div className="h-4 w-4 border-2 border-green-600 border-t-transparent rounded-full animate-spin mb-4"></div>
                             <Skeleton className="h-64 w-full rounded-lg" />
-                            <p className="mt-4 text-sm text-gray-500">Generating heatmap visualization...</p>
+                            <p className="mt-4 text-sm text-gray-500">Generating combined visualization...</p>
                           </div>
-                        ) : heatmapImage ? (
+                        ) : combinedHeatmap ? (
                           <div className="relative">
                             <img
-                              src={heatmapImage || "/placeholder.svg"}
-                              alt="Grad-CAM Heatmap"
+                              src={combinedHeatmap || "/placeholder.svg"}
+                              alt="Combined Detection and Heatmap"
                               className="w-full h-auto rounded-lg object-contain max-h-[400px]"
                             />
                           </div>
                         ) : (
                           <div className="bg-gray-100 p-8 rounded-lg text-center">
-                            <p className="text-gray-600">Heatmap not available. Click "Analyze Image" to generate.</p>
+                            <p className="text-gray-600">Combined visualization not available. Click "Analyze Image" to generate.</p>
                           </div>
                         )}
                       </div>
 
                       <div className="bg-gray-50 p-4 rounded-lg">
-                        <h3 className="font-medium mb-2">How to interpret the heatmap:</h3>
+                        <h3 className="font-medium mb-2">How to interpret:</h3>
                         <ul className="text-sm space-y-2">
                           <li className="flex items-center gap-2">
                             <div className="w-4 h-4 bg-red-500 rounded-sm"></div>
@@ -549,11 +560,7 @@ export default function Home() {
                           </li>
                           <li className="flex items-center gap-2">
                             <div className="w-4 h-4 bg-yellow-500 rounded-sm"></div>
-                            <span>Yellow areas had moderate influence on the classification</span>
-                          </li>
-                          <li className="flex items-center gap-2">
-                            <div className="w-4 h-4 bg-blue-500 rounded-sm"></div>
-                            <span>Blue areas had minimal influence on the classification</span>
+                            <span>Yellow boxes show detected disease regions</span>
                           </li>
                         </ul>
                       </div>
