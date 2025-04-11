@@ -2,7 +2,7 @@ from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 import numpy as np
 import io
-from PIL import Image
+from PIL import Image, ImageDraw, ImageFont
 import tensorflow as tf
 from tensorflow.keras.applications.imagenet_utils import preprocess_input
 from fastapi.responses import JSONResponse
@@ -16,6 +16,7 @@ from torchvision import models, transforms
 from torchcam.methods import CAM, GradCAM, GradCAMpp  # Using GradCAMpp instead of GradCAMPlusPlus
 from fastapi.responses import Response
 import matplotlib.pyplot as plt
+import cv2
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -55,17 +56,26 @@ IMG_SIZE = 224
 
 # Class indices
 class_names = {
-    0: 'black spot',
-    1: 'greening',
-    2: 'healthy',
-    3: 'scab',
-    4: 'thrips'
+    0: 'Brown Spot',
+    1: 'Bacterial Leaf Blight',
+    2: 'Rice Blast',
+    3: 'Sheath Blight',
+    4: 'Tungro'
+}
+
+# Colors for different classes
+COLORS = {
+    'Brown Spot': (255, 0, 0),        # Red
+    'Bacterial Leaf Blight': (0, 255, 0),  # Green
+    'Rice Blast': (0, 0, 255),        # Blue
+    'Sheath Blight': (255, 255, 0),   # Yellow
+    'Tungro': (255, 0, 255)           # Magenta
 }
 
 # Load models only once using LRU cache
 @lru_cache(maxsize=1)
 def get_mobilenet_model():
-    model_path = BASE_DIR / "models" / "best_lemon.keras"
+    model_path = BASE_DIR / "models" / "ResNet50.keras"
     logger.info(f"Loading MobileNet model from: {model_path}")
     
     if not model_path.exists():
@@ -370,4 +380,74 @@ async def detect_image_with_gradcam(file: UploadFile = File(...)):
         raise HTTPException(
             status_code=500, 
             detail=f"Error processing image with Grad-CAM++: {str(e)}"
+        )
+
+@app.post("/detect_with_boxes")
+async def detect_with_boxes(file: UploadFile = File(...)):
+    try:
+        # Read image data
+        image_data = await file.read()
+        nparr = np.frombuffer(image_data, np.uint8)
+        img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        
+        # Convert BGR to RGB
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        
+        # Convert to PIL Image
+        image = Image.fromarray(img)
+        
+        # Get YOLO model
+        yolo_model = get_yolo_model()
+        
+        # Configure YOLO parameters
+        yolo_model.conf = 0.25
+        yolo_model.task = 'detect'
+        yolo_model.mode = 'predict'
+        
+        # Run prediction
+        yolo_results = yolo_model.predict(
+            source=image,
+            save=False,
+            save_txt=False,
+            verbose=False
+        )
+        
+        # Create a draw object
+        draw = ImageDraw.Draw(image)
+        
+        # Draw bounding boxes
+        for result in yolo_results:
+            boxes = result.boxes
+            for i in range(len(boxes)):
+                x1, y1, x2, y2 = boxes.xyxy[i].tolist()
+                conf = boxes.conf[i].item()
+                cls = boxes.cls[i].item()
+                class_name = result.names[int(cls)]
+                
+                # Get color for this class
+                color = COLORS.get(class_name, (255, 255, 255))
+                
+                # Draw rectangle
+                draw.rectangle([(x1, y1), (x2, y2)], outline=color, width=3)
+                
+                # Draw label
+                label = f"{class_name} {conf:.2f}"
+                draw.text((x1, y1 - 10), label, fill=color)
+        
+        # Convert back to bytes
+        buffered = io.BytesIO()
+        image.save(buffered, format="JPEG")
+        result_image_data = buffered.getvalue()
+        
+        # Return the image with bounding boxes
+        return Response(
+            content=result_image_data,
+            media_type="image/jpeg"
+        )
+        
+    except Exception as e:
+        logger.error(f"Error processing image with boxes: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error processing image with boxes: {str(e)}"
         )

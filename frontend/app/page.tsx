@@ -322,38 +322,71 @@ export default function Home() {
                 <TabsContent value="detection" className="mt-4">
                   <div className="relative">
                     {preview && (
-                      <img src={preview || "/placeholder.svg"} alt="Lemon Leaf" className="w-full rounded-lg" />
+                      <img src={preview} alt="Rice Leaf" className="w-full rounded-lg" />
                     )}
                     {results.yolo_detections && results.yolo_detections.length > 0 ? (
-                      results.yolo_detections.map((box: any, index: number) => (
-                        <div
-                          key={index}
-                          className="absolute border-2 border-yellow-500 rounded-sm flex items-center justify-center"
-                          style={{
-                            left: `${box.box[0]}%`,
-                            top: `${box.box[1]}%`,
-                            width: `${box.box[2] - box.box[0]}%`,
-                            height: `${box.box[3] - box.box[1]}%`,
-                          }}
-                        >
-                          <span className="bg-yellow-500 text-xs text-black px-1 absolute -top-5 left-0">
-                            {box.class_name} ({(box.confidence * 100).toFixed(0)}%)
-                          </span>
-                        </div>
-                      ))
+                      results.yolo_detections.map((detection: any, index: number) => {
+                        // Get color based on class name
+                        const colorMap: { [key: string]: string } = {
+                          'Brown Spot': 'border-red-500',
+                          'Bacterial Leaf Blight': 'border-green-500',
+                          'Rice Blast': 'border-blue-500',
+                          'Sheath Blight': 'border-yellow-500',
+                          'Tungro': 'border-purple-500'
+                        }
+                        
+                        const color = colorMap[detection.class_name] || 'border-yellow-500'
+                        
+                        return (
+                          <div
+                            key={index}
+                            className={`absolute border-2 ${color} rounded-sm flex items-center justify-center`}
+                            style={{
+                              left: `${detection.box[0]}px`,
+                              top: `${detection.box[1]}px`,
+                              width: `${detection.box[2] - detection.box[0]}px`,
+                              height: `${detection.box[3] - detection.box[1]}px`,
+                            }}
+                          >
+                            <span className={`absolute -top-6 left-0 px-1 text-xs font-medium ${color.replace('border', 'text')}`}>
+                              {detection.class_name} ({(detection.confidence * 100).toFixed(0)}%)
+                            </span>
+                          </div>
+                        )
+                      })
                     ) : (
                       <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-20 rounded-lg">
                         <div className="bg-white p-4 rounded-md shadow-md">
-                          <p className="text-center font-medium">No specific disease areas detected</p>
+                          <p className="text-center font-medium">No disease areas detected</p>
                         </div>
                       </div>
                     )}
                   </div>
-                  <p className="text-sm mt-2 text-gray-500">
-                    {!results.yolo_detections || results.yolo_detections.length === 0
-                      ? "No specific disease patterns detected in this image"
-                      : `${results.yolo_detections.length} disease area(s) detected`}
-                  </p>
+                  <div className="mt-4">
+                    <h3 className="font-medium mb-2">Detection Legend:</h3>
+                    <div className="grid grid-cols-2 gap-2 text-sm">
+                      <div className="flex items-center">
+                        <div className="w-4 h-4 border-2 border-red-500 mr-2"></div>
+                        <span>Brown Spot</span>
+                      </div>
+                      <div className="flex items-center">
+                        <div className="w-4 h-4 border-2 border-green-500 mr-2"></div>
+                        <span>Bacterial Leaf Blight</span>
+                      </div>
+                      <div className="flex items-center">
+                        <div className="w-4 h-4 border-2 border-blue-500 mr-2"></div>
+                        <span>Rice Blast</span>
+                      </div>
+                      <div className="flex items-center">
+                        <div className="w-4 h-4 border-2 border-yellow-500 mr-2"></div>
+                        <span>Sheath Blight</span>
+                      </div>
+                      <div className="flex items-center">
+                        <div className="w-4 h-4 border-2 border-purple-500 mr-2"></div>
+                        <span>Tungro</span>
+                      </div>
+                    </div>
+                  </div>
                 </TabsContent>
 
                 <TabsContent value="heatmap" className="mt-4">
