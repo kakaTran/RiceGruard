@@ -461,69 +461,33 @@ async def detect_with_combined_heatmap(file: UploadFile = File(...)):
             boxes = result.boxes
             for i in range(len(boxes)):
                 x1, y1, x2, y2 = boxes.xyxy[i].tolist()
-                detected_boxes.append([int(x1), int(y1), int(x2), int(y2)])
+                cls = boxes.cls[i].item()
+                class_name = result.names[int(cls)]
+                detected_boxes.append({
+                    "box": [int(x1), int(y1), int(x2), int(y2)],
+                    "class": class_name
+                })
         
         # If no boxes detected, apply heatmap to entire image
         if not detected_boxes:
             result_image = apply_gradcam(original_image)
         else:
-            # Apply heatmap to each detected region
-            # Start with original image
-            combined_img = np.array(original_image)
+            # First apply GradCAM to the entire image
+            heatmap_img = apply_gradcam(original_image)
+            heatmap_np = np.array(heatmap_img)
             
-            # Ensure combined_img is RGB (3 channels) for OpenCV operations
-            if combined_img.ndim > 2 and combined_img.shape[2] == 4:
-                combined_img = combined_img[:, :, :3]
+            # Get the annotated image with YOLO boxes directly
+            yolo_annotated = yolo_results[0].plot()
             
-            for box in detected_boxes:
-                x1, y1, x2, y2 = box
-                # Crop region
-                region = original_image.crop((x1, y1, x2, y2))
-                
-                # Skip regions that are too small
-                if region.width < 10 or region.height < 10:
-                    continue
-                    
-                # Apply GradCAM to region
-                region_heatmap = apply_gradcam(region)
-                region_heatmap_np = np.array(region_heatmap)
-                
-                # Paste region back
-                try:
-                    # Make sure dimensions match when pasting back
-                    region_height, region_width = region_heatmap_np.shape[:2]
-                    target_height = y2 - y1
-                    target_width = x2 - x1
-                    
-                    if region_height != target_height or region_width != target_width:
-                        region_heatmap_np = np.array(
-                            Image.fromarray(region_heatmap_np).resize((target_width, target_height))
-                        )
-                    
-                    # Ensure region_heatmap_np is RGB for consistency
-                    if region_heatmap_np.ndim > 2 and region_heatmap_np.shape[2] == 4:
-                        region_heatmap_np = region_heatmap_np[:, :, :3]
-                        
-                    # Paste the heatmap region into the combined image
-                    combined_img[y1:y2, x1:x2] = region_heatmap_np
-                except Exception as e:
-                    logger.warning(f"Error pasting region: {str(e)}")
-                    continue
-            
-            # Draw bounding boxes on top
-            try:
-                for box in detected_boxes:
-                    x1, y1, x2, y2 = box
-                    # Draw rectangle with OpenCV
-                    combined_img = cv2.rectangle(
-                        combined_img.astype(np.uint8), 
-                        (x1, y1), 
-                        (x2, y2), 
-                        (255, 255, 0), 
-                        2
-                    )
-            except Exception as e:
-                logger.warning(f"Error drawing rectangles: {str(e)}")
+            # Create a combined visualization
+            # Overlay the heatmap with the YOLO annotations
+            # Use alpha blending for better visualization
+            alpha = 0.7  # Adjust this for transparency
+            combined_img = cv2.addWeighted(
+                heatmap_np, alpha, 
+                yolo_annotated, 1 - alpha, 
+                0
+            )
             
             # Convert back to PIL Image
             result_image = Image.fromarray(combined_img.astype(np.uint8))
