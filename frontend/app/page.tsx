@@ -27,7 +27,10 @@ export default function Home() {
   const [loadingExplanation, setLoadingExplanation] = useState(false)
   const [heatmapImage, setHeatmapImage] = useState<string | null>(null)
   const [loadingHeatmap, setLoadingHeatmap] = useState(false)
-  const [isChatOpen, setIsChatOpen] = useState(false)
+  const [detectionImage, setDetectionImage] = useState<string | null>(null)
+  const [loadingDetection, setLoadingDetection] = useState(false)
+  const [combinedHeatmap, setCombinedHeatmap] = useState<string | null>(null)
+  const [loadingCombined, setLoadingCombined] = useState(false)
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0]
@@ -38,7 +41,12 @@ export default function Home() {
         setPreview(reader.result as string)
       }
       reader.readAsDataURL(selectedFile)
-      resetResults()
+      setResults(null)
+      setError(null)
+      setExplanation("")
+      setHeatmapImage(null)
+      setDetectionImage(null)
+      setCombinedHeatmap(null)
     }
   }
 
@@ -52,7 +60,12 @@ export default function Home() {
         setPreview(reader.result as string)
       }
       reader.readAsDataURL(droppedFile)
-      resetResults()
+      setResults(null)
+      setError(null)
+      setExplanation("")
+      setHeatmapImage(null)
+      setDetectionImage(null)
+      setCombinedHeatmap(null)
     }
   }
 
@@ -70,7 +83,12 @@ export default function Home() {
   const clearFile = () => {
     setFile(null)
     setPreview(null)
-    resetResults()
+    setResults(null)
+    setError(null)
+    setExplanation("")
+    setHeatmapImage(null)
+    setDetectionImage(null)
+    setCombinedHeatmap(null)
   }
 
   const analyzeImage = async () => {
@@ -80,6 +98,8 @@ export default function Home() {
     setError(null)
     setExplanation("")
     setHeatmapImage(null)
+    setDetectionImage(null)
+    setCombinedHeatmap(null)
 
     try {
       const formData = new FormData()
@@ -103,9 +123,11 @@ export default function Home() {
       }
 
       setResults(data)
-
-      // After successful analysis, fetch the heatmap
+      
+      // After successful analysis, fetch the visualization images
       fetchHeatmap()
+      fetchDetectionImage()
+      fetchCombinedHeatmap()
     } catch (err) {
       console.error("Error details:", err)
       setError(err instanceof Error ? err.message : "An unknown error occurred")
@@ -139,6 +161,62 @@ export default function Home() {
       console.error("Error fetching heatmap:", err)
     } finally {
       setLoadingHeatmap(false)
+    }
+  }
+
+  const fetchDetectionImage = async () => {
+    if (!file) return
+
+    setLoadingDetection(true)
+    try {
+      const formData = new FormData()
+      formData.append("file", file)
+
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/detect_with_boxes`, {
+        method: "POST",
+        body: formData,
+      })
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch detection image: ${response.status}`)
+      }
+
+      // Get the response as a blob
+      const blob = await response.blob()
+      const imageUrl = URL.createObjectURL(blob)
+      setDetectionImage(imageUrl)
+    } catch (err) {
+      console.error("Error fetching detection image:", err)
+    } finally {
+      setLoadingDetection(false)
+    }
+  }
+
+  const fetchCombinedHeatmap = async () => {
+    if (!file) return
+
+    setLoadingCombined(true)
+    try {
+      const formData = new FormData()
+      formData.append("file", file)
+
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/detect_with_combined_heatmap`, {
+        method: "POST",
+        body: formData,
+      })
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch combined heatmap: ${response.status}`)
+      }
+
+      // Get the response as a blob
+      const blob = await response.blob()
+      const imageUrl = URL.createObjectURL(blob)
+      setCombinedHeatmap(imageUrl)
+    } catch (err) {
+      console.error("Error fetching combined heatmap:", err)
+    } finally {
+      setLoadingCombined(false)
     }
   }
 
