@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: my-frontend
+    name: riceguard-kaka
     runtime: node
     plan: free
     buildCommand: |
@@ -10,18 +10,3 @@ services:
     startCommand: |
       cd frontend
       npm run start
-
-  - type: web
-    name: my-backend
-    runtime: python
-    plan: free
-    buildCommand: |
-      cd backend
-      pip install -r requirements.txt
-    startCommand: |
-      cd backend
-<<<<<<< HEAD
-      uvicorn app.main:app --host 0.0.0.0 --port 4000 --reload
-=======
-      uvicorn app.main:app --host 0.0.0.0 --port 4000
->>>>>>> a508b5a567ad8449089e8c9f0d0d4bc565253427
