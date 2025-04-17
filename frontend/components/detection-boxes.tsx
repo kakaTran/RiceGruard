@@ -21,6 +21,14 @@ export default function DetectionBoxes({ detections, imageUrl, heatmapUrl }: Det
     Tungro: "border-purple-500",
   };
 
+  const bgColorMap: { [key: string]: string } = {
+    Brown_Spot: "bg-amber-500",
+    Bacterial_Blight: "bg-green-500",
+    Leaf_Blight: "bg-blue-500",
+    Sheath_Blight: "bg-yellow-500",
+    Tungro: "bg-purple-500",
+  };
+
   useEffect(() => {
     if (imageRef.current && imageRef.current.complete) {
       updateImageDimensions();
@@ -51,6 +59,8 @@ export default function DetectionBoxes({ detections, imageUrl, heatmapUrl }: Det
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
   }, []);
+
+  console.log("Detections:", detections);
 
   if (!detections || detections.length === 0) {
     return (
@@ -83,7 +93,9 @@ export default function DetectionBoxes({ detections, imageUrl, heatmapUrl }: Det
 
       {isImageLoaded &&
         detections.map((detection, index) => {
-          const color = colorMap[detection.class_name] || "border-red-500";
+          console.log(`Rendering detection ${index}:`, detection);
+          const borderColor = colorMap[detection.class_name] || "border-red-500";
+          const bgColor = bgColorMap[detection.class_name] || "bg-red-500";
 
           const scaleX = imageDimensions.width / imageDimensions.naturalWidth;
           const scaleY = imageDimensions.height / imageDimensions.naturalHeight;
@@ -96,29 +108,16 @@ export default function DetectionBoxes({ detections, imageUrl, heatmapUrl }: Det
           return (
             <div
               key={index}
-              className={`absolute border-2 ${color} rounded-sm`}
+              className={`absolute border-2 ${borderColor} rounded-sm cursor-pointer`}
               style={{
                 left: `${left}px`,
                 top: `${top}px`,
                 width: `${width}px`,
                 height: `${height}px`,
               }}
-              onMouseEnter={() => {
-                const tooltip = document.getElementById(`tooltip-${index}`);
-                if (tooltip) {
-                  tooltip.style.display = 'block';
-                  tooltip.style.backgroundColor = color.replace("border", "bg");
-                }
-              }}
-              onMouseLeave={() => {
-                const tooltip = document.getElementById(`tooltip-${index}`);
-                if (tooltip) tooltip.style.display = 'none';
-              }}
             >
               <div
-                id={`tooltip-${index}`}
-                className="absolute -top-6 left-0 px-1.5 py-0.5 text-xs font-medium text-white rounded"
-                style={{ display: 'none' }}
+                className={`absolute -top-8 left-0 px-2 py-1 text-xs font-medium text-white rounded ${bgColor} opacity-0 transition-opacity duration-200 hover:opacity-100`}
               >
                 {detection.class_name} ({(detection.confidence * 100).toFixed(0)}%)
               </div>

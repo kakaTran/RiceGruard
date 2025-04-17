@@ -441,16 +441,11 @@ async def detect_with_combined_heatmap(file: UploadFile = File(...)):
     try:
         # Read image data
         image_data = await file.read()
-        image = Image.open(io.BytesIO(image_data))
-        
-        # Ensure image is in RGB format
-        if image.mode == 'RGBA':
-            image = image.convert('RGB')
-            
-        original_image = image.copy()
+        image = Image.open(io.BytesIO(image_data)).convert("RGB")
         
         # Get models
         yolo_model = get_yolo_model()
+        mobilenet_model = get_mobilenet_model()  # Assuming this is your ResNet50 model
         
         # Process with YOLO model for object detection
         yolo_results = yolo_model(image, verbose=False)
@@ -463,79 +458,60 @@ async def detect_with_combined_heatmap(file: UploadFile = File(...)):
                 x1, y1, x2, y2 = boxes.xyxy[i].tolist()
                 detected_boxes.append([int(x1), int(y1), int(x2), int(y2)])
         
-        # If no boxes detected, apply heatmap to entire image
+        # Check if any boxes were detected
         if not detected_boxes:
-            result_image = apply_gradcam(original_image)
-        else:
-            # Apply heatmap to each detected region
-            # Start with original image
-            combined_img = np.array(original_image)
+            return JSONResponse(content={"message": "No disease detected, heatmap not generated."}, status_code=400)
+
+        # Create a blank image for the heatmap
+        heatmap = np.zeros((image.height, image.width), dtype=np.float32)
+
+        # Apply ResNet50 to each detected box to generate heatmaps
+        for box in detected_boxes:
+            x1, y1, x2, y2 = box
+            # Crop region
+            region = image.crop((x1, y1, x2, y2))
+            # Preprocess the region for ResNet50
+            region_resized = region.resize((IMG_SIZE, IMG_SIZE))
+            input_tensor = preprocess(np.array(region_resized)).unsqueeze(0)  # Add batch dimension
             
-            # Ensure combined_img is RGB (3 channels) for OpenCV operations
-            if combined_img.ndim > 2 and combined_img.shape[2] == 4:
-                combined_img = combined_img[:, :, :3]
+            # Get the model
+            model = get_mobilenet_model()
+            model.eval()
             
-            for box in detected_boxes:
-                x1, y1, x2, y2 = box
-                # Crop region
-                region = original_image.crop((x1, y1, x2, y2))
-                
-                # Skip regions that are too small
-                if region.width < 10 or region.height < 10:
-                    continue
-                    
-                # Apply GradCAM to region
-                region_heatmap = apply_gradcam(region)
-                region_heatmap_np = np.array(region_heatmap)
-                
-                # Paste region back
-                try:
-                    # Make sure dimensions match when pasting back
-                    region_height, region_width = region_heatmap_np.shape[:2]
-                    target_height = y2 - y1
-                    target_width = x2 - x1
-                    
-                    if region_height != target_height or region_width != target_width:
-                        region_heatmap_np = np.array(
-                            Image.fromarray(region_heatmap_np).resize((target_width, target_height))
-                        )
-                    
-                    # Ensure region_heatmap_np is RGB for consistency
-                    if region_heatmap_np.ndim > 2 and region_heatmap_np.shape[2] == 4:
-                        region_heatmap_np = region_heatmap_np[:, :, :3]
-                        
-                    # Paste the heatmap region into the combined image
-                    combined_img[y1:y2, x1:x2] = region_heatmap_np
-                except Exception as e:
-                    logger.warning(f"Error pasting region: {str(e)}")
-                    continue
+            # Forward pass to get features
+            with torch.no_grad():
+                features = model(input_tensor)
             
-            # Draw bounding boxes on top
-            try:
-                for box in detected_boxes:
-                    x1, y1, x2, y2 = box
-                    # Draw rectangle with OpenCV
-                    combined_img = cv2.rectangle(
-                        combined_img.astype(np.uint8), 
-                        (x1, y1), 
-                        (x2, y2), 
-                        (255, 255, 0), 
-                        2
-                    )
-            except Exception as e:
-                logger.warning(f"Error drawing rectangles: {str(e)}")
+            # Generate heatmap from features (you can implement your own logic here)
+            # For example, using Grad-CAM or similar methods
+            region_heatmap = apply_gradcam(region)  # Assuming apply_gradcam is defined to use ResNet50
             
-            # Convert back to PIL Image
-            result_image = Image.fromarray(combined_img.astype(np.uint8))
-        
+            # Resize heatmap to match the bounding box size
+            region_heatmap_resized = np.array(
+                Image.fromarray(region_heatmap).resize((x2 - x1, y2 - y1))
+            )
+
+            # Add the region heatmap to the overall heatmap
+            heatmap[y1:y2, x1:x2] += region_heatmap_resized
+
+        # Normalize the heatmap
+        heatmap = np.clip(heatmap, 0, 255)
+        heatmap = (heatmap / np.max(heatmap) * 255).astype(np.uint8)
+
+        # Convert heatmap to PIL Image
+        heatmap_image = Image.fromarray(heatmap)
+
+        # Overlay the heatmap on the original image
+        overlay = Image.blend(image, heatmap_image.convert("RGB"), alpha=0.5)  # Adjust alpha for blending
+
         # Convert result to bytes
         buffered = io.BytesIO()
-        result_image.save(buffered, format="JPEG")
-        result_image_data = buffered.getvalue()
+        overlay.save(buffered, format="JPEG")
+        overlay_image_data = buffered.getvalue()
         
-        # Return the combined image
+        # Return the overlay image
         return Response(
-            content=result_image_data,
+            content=overlay_image_data,
             media_type="image/jpeg"
         )
     

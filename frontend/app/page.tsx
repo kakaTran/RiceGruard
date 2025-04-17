@@ -1,8 +1,7 @@
 "use client"
 
 import type React from "react"
-
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import { Upload, X, Leaf, AlertCircle, Info } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
@@ -24,7 +23,6 @@ export default function Home() {
   const [results, setResults] = useState<any>(null)
   const [error, setError] = useState<string | null>(null)
   const [explanation, setExplanation] = useState<string>("")
-  const [loadingExplanation, setLoadingExplanation] = useState(false)
   const [heatmapImage, setHeatmapImage] = useState<string | null>(null)
   const [loadingHeatmap, setLoadingHeatmap] = useState(false)
   const [detectionImage, setDetectionImage] = useState<string | null>(null)
@@ -117,17 +115,13 @@ export default function Home() {
 
       const data = await response.json()
 
-      // Validate response format
       if (!data.mobilenet_classification) {
         throw new Error("Invalid response format from server")
       }
 
       setResults(data)
-      
-      // After successful analysis, fetch the visualization images
       fetchHeatmap()
       fetchDetectionImage()
-      fetchCombinedHeatmap()
     } catch (err) {
       console.error("Error details:", err)
       setError(err instanceof Error ? err.message : "An unknown error occurred")
@@ -153,7 +147,6 @@ export default function Home() {
         throw new Error(`Failed to fetch heatmap: ${response.status}`)
       }
 
-      // Get the response as a blob
       const blob = await response.blob()
       const imageUrl = URL.createObjectURL(blob)
       setHeatmapImage(imageUrl)
@@ -181,7 +174,6 @@ export default function Home() {
         throw new Error(`Failed to fetch detection image: ${response.status}`)
       }
 
-      // Get the response as a blob
       const blob = await response.blob()
       const imageUrl = URL.createObjectURL(blob)
       setDetectionImage(imageUrl)
@@ -192,85 +184,34 @@ export default function Home() {
     }
   }
 
-  const fetchCombinedHeatmap = async () => {
-    if (!file) return
-
-    setLoadingCombined(true)
-    try {
-      const formData = new FormData()
-      formData.append("file", file)
-
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/detect_with_combined_heatmap`, {
-        method: "POST",
-        body: formData,
-      })
-
-      if (!response.ok) {
-        throw new Error(`Failed to fetch combined heatmap: ${response.status}`)
-      }
-
-      // Get the response as a blob
-      const blob = await response.blob()
-      const imageUrl = URL.createObjectURL(blob)
-      setCombinedHeatmap(imageUrl)
-    } catch (err) {
-      console.error("Error fetching combined heatmap:", err)
-    } finally {
-      setLoadingCombined(false)
-    }
-  }
-
-  // Helper function to get the appropriate color for disease status
   const getDiseaseStatusColor = (className: string) => {
     if (className === "healthy") return "bg-green-100 text-green-800 border-green-200"
     return "bg-red-100 text-red-800 border-red-200"
   }
 
-  // Helper function to check if YOLO detection is empty
   const isEmptyYoloDetection = (results: any) => {
     return results && results.yolo_detections && results.yolo_detections.length === 0
   }
 
-  // Get the detected disease name
   const getDetectedDisease = () => {
     if (!results) return null
     return results.mobilenet_classification.class_name
   }
 
-  // Open chat with context
-  const openChatWithContext = () => {
-    setIsChatOpen(true)
-  }
-
-  // Fetch explanation when results change
-  useEffect(() => {
-    const fetchExplanation = async () => {
-      if (!results) return
-
-      setLoadingExplanation(true)
-      try {
-        let diseaseName
-
-        if (isEmptyYoloDetection(results)) {
-          diseaseName = "no detection"
-        } else {
-          diseaseName = results.mobilenet_classification.class_name
-        }
-
+  const explanationText = async () => {
+    try {
+      if (isEmptyYoloDetection(results)) {
+        setExplanation("No disease detected. The rice leaf appears healthy or no specific disease patterns were identified.")
+      } else {
+        const diseaseName = results.mobilenet_classification.class_name
         const explanation = await generateExplanation(diseaseName)
         setExplanation(explanation)
-      } catch (error) {
-        console.error("Error fetching explanation:", error)
-        setExplanation("Unable to generate explanation at this time.")
-      } finally {
-        setLoadingExplanation(false)
       }
+    } catch (error) {
+      console.error("Error fetching explanation:", error)
+      setExplanation("Unable to generate explanation at this time.")
     }
-
-    if (results) {
-      fetchExplanation()
-    }
-  }, [results])
+  }
 
   return (
     <main className="container mx-auto p-4 max-w-6xl">
@@ -337,14 +278,7 @@ export default function Home() {
               )}
 
               <Button className="w-full mt-4" disabled={!file || loading} onClick={analyzeImage} variant="default">
-                {loading ? (
-                  <div className="flex items-center gap-2">
-                    <div className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                    Analyzing...
-                  </div>
-                ) : (
-                  "Analyze Image"
-                )}
+                {loading ? <span>Analyzing...</span> : "Analyze Image"}
               </Button>
 
               {error && (
@@ -392,13 +326,9 @@ export default function Home() {
 
                         <div className="space-y-2">
                           <h3 className="font-medium">Details:</h3>
-                          {loadingExplanation ? (
-                            <Skeleton className="h-16 w-full" />
-                          ) : (
-                            <div className="text-sm text-gray-700 space-y-2">
-                              <p>{explanation}</p>
-                            </div>
-                          )}
+                          <div className="text-sm text-gray-700 space-y-2">
+                            <p>{explanation || "Click the chat button to generate an explanation."}</p>
+                          </div>
                         </div>
 
                         <Alert className="bg-blue-50 border-blue-200">
@@ -433,13 +363,9 @@ export default function Home() {
 
                         <div className="space-y-2">
                           <h3 className="font-medium">Disease Information:</h3>
-                          {loadingExplanation ? (
-                            <Skeleton className="h-16 w-full" />
-                          ) : (
-                            <div className="text-sm text-gray-700 space-y-2 p-3 bg-gray-50 rounded-lg">
-                              <p>{explanation}</p>
-                            </div>
-                          )}
+                          <div className="text-sm text-gray-700 space-y-2 p-3 bg-gray-50 rounded-lg">
+                            <p>{explanation || "Click the chat button to generate an explanation."}</p>
+                          </div>
                         </div>
 
                         <Alert className="bg-blue-50 border-blue-200">
@@ -521,9 +447,13 @@ export default function Home() {
 
                         {loadingHeatmap ? (
                           <div className="flex flex-col items-center justify-center py-8">
-                            <div className="h-4 w-4 border-2 border-green-600 border-t-transparent rounded-full animate-spin mb-4"></div>
                             <Skeleton className="h-64 w-full rounded-lg" />
                             <p className="mt-4 text-sm text-gray-500">Generating heatmap visualization...</p>
+                          </div>
+                        ) : isEmptyYoloDetection(results) ? (
+                          <div className="bg-gray-100 p-8 rounded-lg text-center">
+                            <p className="text-gray-600 font-medium">Heatmap Not Available</p>
+                            <p className="text-gray-500 mt-2">No disease detected in the image.</p>
                           </div>
                         ) : heatmapImage ? (
                           <div className="relative">
@@ -575,10 +505,10 @@ export default function Home() {
           </Card>
         </div>
       </div>
-      {results && (
+      {results && !isEmptyYoloDetection(results) && (
         <DiseaseChatButton
-          diseaseName={results.mobilenet_classification.class_name}
-          onStartChat={openChatWithContext}
+          diseaseName={getDetectedDisease() || "unknown"}
+          onStartChat={explanationText}
         />
       )}
     </main>
