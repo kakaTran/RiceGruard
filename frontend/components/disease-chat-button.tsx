@@ -2,11 +2,12 @@
 
 import { MessageSquare, X, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import ChatBox from "./chat/chat-box"
 import { generateChatResponse } from "@/app/action/generate-chat-response"
 
+// TypeScript interfaces for better type safety
 interface DiseaseChatButtonProps {
   diseaseName: string
   onStartChat: () => void
@@ -19,69 +20,174 @@ interface DiseaseInfo {
   prevention: string
 }
 
+interface LoadingState {
+  general: boolean
+  symptoms: boolean
+  treatment: boolean
+  prevention: boolean
+}
+
+interface ErrorState {
+  general: string | null
+  symptoms: string | null
+  treatment: string | null
+  prevention: string | null
+}
+
+// Simple in-memory cache
+const cache = new Map<string, DiseaseInfo>()
+
 export default function DiseaseChatButton({ diseaseName, onStartChat }: DiseaseChatButtonProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [diseaseInfo, setDiseaseInfo] = useState<DiseaseInfo>({
-    general: "Loading...",
-    symptoms: "Loading...",
-    treatment: "Loading...",
-    prevention: "Loading..."
+    general: "",
+    symptoms: "",
+    treatment: "",
+    prevention: ""
   })
-  const [isLoading, setIsLoading] = useState(true)
+  const [loading, setLoading] = useState<LoadingState>({
+    general: true,
+    symptoms: true,
+    treatment: true,
+    prevention: true
+  })
+  const [errors, setErrors] = useState<ErrorState>({
+    general: null,
+    symptoms: null,
+    treatment: null,
+    prevention: null
+  })
 
-  useEffect(() => {
-    const fetchDiseaseInfo = async () => {
+  // Memoize fetch function to avoid redundant calls
+  const fetchDiseaseInfo = useMemo(
+    () => async (disease: string) => {
+      // Check cache first
+      if (cache.has(disease)) {
+        setDiseaseInfo(cache.get(disease)!)
+        setLoading({ general: false, symptoms: false, treatment: false, prevention: false })
+        return
+      }
+
       try {
-        setIsLoading(true)
-        
-        // Fetch general information
-        const generalResponse = await generateChatResponse([{
+        // Single API call with structured prompt
+        const prompt = `
+          Provide information about ${disease} disease in rice plants, structured into four sections with clear delimiters:
+          ### General Information
+          [Provide general information about the disease, its causes, and impact on rice plants]
+          ### Symptoms
+          [List the symptoms of the disease in rice plants]
+          ### Treatment
+          [List the treatment methods for the disease in rice plants]
+          ### Prevention
+          [List the prevention methods for the disease in rice plants]
+        `
+        const response = await generateChatResponse([{
           role: "user",
-          content: `Provide general information about ${diseaseName} disease in rice plants.`
-        }])
-        setDiseaseInfo(prev => ({ ...prev, general: generalResponse }))
+          content: prompt
+        }]).catch(() => {
+          throw new Error("Failed to load information.")
+        })
 
-        // Fetch symptoms
-        const symptomsResponse = await generateChatResponse([{
-          role: "user",
-          content: `List the symptoms of ${diseaseName} disease in rice plants.`
-        }])
-        setDiseaseInfo(prev => ({ ...prev, symptoms: symptomsResponse }))
+        // Parse the response into four parts
+        const sections = response.split("###").map(section => section.trim()).filter(section => section)
+        const newInfo: DiseaseInfo = {
+          general: "",
+          symptoms: "",
+          treatment: "",
+          prevention: ""
+        }
 
-        // Fetch treatment
-        const treatmentResponse = await generateChatResponse([{
-          role: "user",
-          content: `List the treatment methods for ${diseaseName} disease in rice plants.`
-        }])
-        setDiseaseInfo(prev => ({ ...prev, treatment: treatmentResponse }))
+        sections.forEach(section => {
+          if (section.startsWith("General Information")) {
+            newInfo.general = section.replace("General Information", "").trim()
+          } else if (section.startsWith("Symptoms")) {
+            newInfo.symptoms = section.replace("Symptoms", "").trim()
+          } else if (section.startsWith("Treatment")) {
+            newInfo.treatment = section.replace("Treatment", "").trim()
+          } else if (section.startsWith("Prevention")) {
+            newInfo.prevention = section.replace("Prevention", "").trim()
+          }
+        })
 
-        // Fetch prevention
-        const preventionResponse = await generateChatResponse([{
-          role: "user",
-          content: `List the prevention methods for ${diseaseName} disease in rice plants.`
-        }])
-        setDiseaseInfo(prev => ({ ...prev, prevention: preventionResponse }))
+        // Validate that all sections were found
+        if (!newInfo.general || !newInfo.symptoms || !newInfo.treatment || !newInfo.prevention) {
+          throw new Error("Incomplete response from API.")
+        }
 
+        setDiseaseInfo(newInfo)
+        cache.set(disease, newInfo) // Cache the result
+        setLoading({ general: false, symptoms: false, treatment: false, prevention: false })
       } catch (error) {
         console.error("Error fetching disease information:", error)
-        setDiseaseInfo({
-          general: "Failed to load information. Please try again later.",
-          symptoms: "Failed to load information. Please try again later.",
-          treatment: "Failed to load information. Please try again later.",
-          prevention: "Failed to load information. Please try again later."
+        setErrors({
+          general: "Failed to load information. Please try again.",
+          symptoms: "Failed to load information. Please try again.",
+          treatment: "Failed to load information. Please try again.",
+          prevention: "Failed to load information. Please try again."
         })
-      } finally {
-        setIsLoading(false)
+        setLoading({ general: false, symptoms: false, treatment: false, prevention: false })
       }
-    }
+    },
+    []
+  )
 
-    fetchDiseaseInfo()
-  }, [diseaseName])
+  useEffect(() => {
+    fetchDiseaseInfo(diseaseName)
+  }, [diseaseName, fetchDiseaseInfo])
 
   const handleClick = () => {
     setIsOpen(true)
     onStartChat()
   }
+
+  // Retry function for failed API calls
+  const handleRetry = async (key: keyof DiseaseInfo) => {
+    setLoading(prev => ({ ...prev, [key]: true }))
+    setErrors(prev => ({ ...prev, [key]: null }))
+    try {
+      const response = await generateChatResponse([{
+        role: "user",
+        content: `Provide ${key} information about ${diseaseName} disease in rice plants.`
+      }])
+      setDiseaseInfo(prev => ({ ...prev, [key]: response }))
+      cache.set(diseaseName, { ...diseaseInfo, [key]: response }) // Update cache
+    } catch (error) {
+      setErrors(prev => ({ ...prev, [key]: "Failed to load information. Please try again." }))
+    } finally {
+      setLoading(prev => ({ ...prev, [key]: false }))
+    }
+  }
+
+  // Tab content component to reduce repetition
+  const TabContent = ({ value, content, isLoading, error }: { 
+    value: keyof DiseaseInfo, 
+    content: string, 
+    isLoading: boolean, 
+    error: string | null 
+  }) => (
+    <TabsContent value={value} className="mt-4 p-4 bg-white rounded-lg shadow">
+      <div className="whitespace-pre-line">
+        {isLoading ? (
+          <div className="flex items-center justify-center">
+            <Loader2 className="h-6 w-6 animate-spin text-green-600" />
+          </div>
+        ) : error ? (
+          <div className="text-red-600">
+            {error}
+            <Button
+              variant="link"
+              onClick={() => handleRetry(value)}
+              className="ml-2 text-green-600"
+            >
+              Retry
+            </Button>
+          </div>
+        ) : (
+          content
+        )}
+      </div>
+    </TabsContent>
+  )
 
   return (
     <>
@@ -93,52 +199,39 @@ export default function DiseaseChatButton({ diseaseName, onStartChat }: DiseaseC
             <TabsTrigger value="treatment">Treatment</TabsTrigger>
             <TabsTrigger value="prevention">Prevention</TabsTrigger>
           </TabsList>
-          <TabsContent value="general" className="mt-4 p-4 bg-white rounded-lg shadow">
-            <div className="whitespace-pre-line">
-              {isLoading ? (
-                <div className="flex items-center justify-center">
-                  <Loader2 className="h-6 w-6 animate-spin text-green-600" />
-                </div>
-              ) : diseaseInfo.general}
-            </div>
-          </TabsContent>
-          <TabsContent value="symptoms" className="mt-4 p-4 bg-white rounded-lg shadow">
-            <div className="whitespace-pre-line">
-              {isLoading ? (
-                <div className="flex items-center justify-center">
-                  <Loader2 className="h-6 w-6 animate-spin text-green-600" />
-                </div>
-              ) : diseaseInfo.symptoms}
-            </div>
-          </TabsContent>
-          <TabsContent value="treatment" className="mt-4 p-4 bg-white rounded-lg shadow">
-            <div className="whitespace-pre-line">
-              {isLoading ? (
-                <div className="flex items-center justify-center">
-                  <Loader2 className="h-6 w-6 animate-spin text-green-600" />
-                </div>
-              ) : diseaseInfo.treatment}
-            </div>
-          </TabsContent>
-          <TabsContent value="prevention" className="mt-4 p-4 bg-white rounded-lg shadow">
-            <div className="whitespace-pre-line">
-              {isLoading ? (
-                <div className="flex items-center justify-center">
-                  <Loader2 className="h-6 w-6 animate-spin text-green-600" />
-                </div>
-              ) : diseaseInfo.prevention}
-            </div>
-          </TabsContent>
+          <TabContent
+            value="general"
+            content={diseaseInfo.general}
+            isLoading={loading.general}
+            error={errors.general}
+          />
+          <TabContent
+            value="symptoms"
+            content={diseaseInfo.symptoms}
+            isLoading={loading.symptoms}
+            error={errors.symptoms}
+          />
+          <TabContent
+            value="treatment"
+            content={diseaseInfo.treatment}
+            isLoading={loading.treatment}
+            error={errors.treatment}
+          />
+          <TabContent
+            value="prevention"
+            content={diseaseInfo.prevention}
+            isLoading={loading.prevention}
+            error={errors.prevention}
+          />
         </Tabs>
       </div>
 
       <Button
         onClick={handleClick}
-        variant="outline"
-        className="mt-4 w-full flex items-center gap-2 border-green-200 text-green-700 hover:bg-green-50"
+        className="fixed bottom-6 right-6 z-[9998] rounded-full h-14 w-14 shadow-lg bg-green-600 hover:bg-green-700 p-0"
+        aria-label="Open chat about rice disease"
       >
-        <MessageSquare className="h-4 w-4" />
-        <span>Ask about {diseaseName}</span>
+        <MessageSquare className="h-6 w-6" />
       </Button>
 
       {isOpen && (
@@ -150,6 +243,7 @@ export default function DiseaseChatButton({ diseaseName, onStartChat }: DiseaseC
               size="icon"
               onClick={() => setIsOpen(false)}
               className="h-8 w-8 text-white hover:bg-green-700 rounded-full"
+              aria-label="Close chat"
             >
               <X className="h-5 w-5" />
             </Button>
@@ -157,14 +251,6 @@ export default function DiseaseChatButton({ diseaseName, onStartChat }: DiseaseC
           <ChatBox detectedDisease={diseaseName} />
         </div>
       )}
-
-      <Button
-        onClick={handleClick}
-        className="fixed bottom-6 right-6 z-[9998] rounded-full h-14 w-14 shadow-lg bg-green-600 hover:bg-green-700 p-0"
-        aria-label="Open chat"
-      >
-        <MessageSquare className="h-6 w-6" />
-      </Button>
     </>
   )
 }
